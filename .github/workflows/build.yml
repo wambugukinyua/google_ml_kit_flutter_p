@@ -1,0 +1,72 @@
+name: Build Android App from Example
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type (apk or appbundle)'
+        required: true
+        default: 'apk'
+        type: choice
+        options:
+          - 'apk'
+          - 'appbundle'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/example
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          ref: develop  # Using your develop branch
+      
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+      
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.29'  # Using the specific version you mentioned
+          channel: 'stable'
+          cache: true
+      
+      - name: Flutter version
+        run: flutter --version
+      
+      - name: Install dependencies
+        run: flutter pub get
+      
+      - name: Run Flutter doctor
+        run: flutter doctor -v
+        
+      - name: Build APK
+        if: ${{ github.event.inputs.build_type == 'apk' }}
+        run: flutter  build apk --target-platform android-arm --release --obfuscate --split-debug-info 
+      
+      - name: Build App Bundle
+        if: ${{ github.event.inputs.build_type == 'appbundle' }}
+        run: flutter build appbundle --release
+      
+      - name: Upload APK artifact
+        if: ${{ github.event.inputs.build_type == 'apk' }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: app-release-flutter-3-29
+          path: packages/example/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 7
+      
+      - name: Upload App Bundle artifact
+        if: ${{ github.event.inputs.build_type == 'appbundle' }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: app-release-bundle-flutter-3-29
+          path: packages/example/build/app/outputs/bundle/release/app-release.aab
+          retention-days: 7
