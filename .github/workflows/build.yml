@@ -1,4 +1,4 @@
-name: Todo App Build
+name:  App Build
 
 on:
   push:
