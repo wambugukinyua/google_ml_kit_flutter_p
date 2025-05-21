@@ -1,0 +1,87 @@
+name: Extract Subfolder to New Repository
+
+on:
+  workflow_dispatch:
+    inputs:
+      subfolder_path:
+        description: 'Path to the subfolder you want to extract (e.g., packages/google_mlkit_barcode_scanning)'
+        required: true
+        default: 'packages/example'
+      new_repo_name:
+        description: 'Name for your new repository'
+        required: true
+        default: 'flutter_mlkit_example'
+      include_history:
+        description: 'Include commit history for the subfolder'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+jobs:
+  extract-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # We need the full history for the extraction
+          ref: develop    # Using your develop branch
+
+      - name: Set up Git
+        run: |
+          git config --global user.name "${{ github.actor }}"
+          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+
+      - name: Create new repository
+        id: create_repo
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          script: |
+            const result = await github.rest.repos.createForAuthenticatedUser({
+              name: "${{ github.event.inputs.new_repo_name }}",
+              description: "Extracted from google_ml_kit_flutter_p repository",
+              private: true,
+              auto_init: false
+            });
+            console.log(`Created repository: ${result.data.html_url}`);
+            return result.data.full_name;
+        
+      - name: Extract subfolder with history
+        if: ${{ github.event.inputs.include_history == 'true' }}
+        run: |
+          # Install git-filter-repo
+          pip install git-filter-repo
+
+          # Extract the subfolder with history
+          git filter-repo --path ${{ github.event.inputs.subfolder_path }}/ --subdirectory-filter ${{ github.event.inputs.subfolder_path }}/
+          
+          # Add remote for new repository
+          git remote add new-origin https://x-access-token:${{ secrets.PERSONAL_ACCESS_TOKEN }}@github.com/${{ steps.create_repo.outputs.result }}.git
+          
+          # Push to new repository
+          git push -u new-origin develop || git push -u new-origin main || git push -u new-origin master
+
+      - name: Extract subfolder without history
+        if: ${{ github.event.inputs.include_history == 'false' }}
+        run: |
+          # Create temporary directory
+          mkdir -p /tmp/extracted-subfolder
+          
+          # Copy contents of the subfolder
+          cp -r ${{ github.event.inputs.subfolder_path }}/* /tmp/extracted-subfolder/
+          
+          # Create new git repository
+          cd /tmp/extracted-subfolder
+          git init
+          git add .
+          git commit -m "Initial commit from extracted subfolder"
+          
+          # Add remote for new repository
+          git remote add origin https://x-access-token:${{ secrets.PERSONAL_ACCESS_TOKEN }}@github.com/${{ steps.create_repo.outputs.result }}.git
+          
+          # Push to new repository
+          git push -u origin main || git push -u origin master
